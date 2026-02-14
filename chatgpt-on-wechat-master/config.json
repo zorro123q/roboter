@@ -1,0 +1,15 @@
+{
+  "channel_type": "wcf",
+  "model": "openai",
+  "open_ai_api_key": "sk-xxx",
+  "text_to_image": "dall-e-3",
+  "voice_reply_voice": false,
+  "debug": true,
+
+  "plugins": [
+    {
+      "name": "MyRAGBot",
+      "enabled": true
+    }
+  ]
+}
