@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Lite</title>
+<style>
+    /* === 全局布局 === */
+    body {
+        font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+        padding: 20px;
+        background: #f0f2f5;
+        height: 95vh;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .box {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* === 顶部标题栏 === */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+    h2 { margin: 0; color: #1a73e8; font-size: 20px; }
+    .subtitle { font-size: 12px; color: #666; font-weight: normal; margin-left: 5px; }
+
+    /* === 按钮样式 === */
+    button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    .btn-sync { background: #34a853; color: white; }
+    .btn-sync:hover { background: #2d8e47; }
+    .btn-sync:disabled { background: #ccc; cursor: not-allowed; }
+
+    .btn-clear { background: #f0f2f5; color: #666; margin-right: 10px; }
+    .btn-clear:hover { background: #e0e0e0; color: #333; }
+
+    .btn-send { background: #1a73e8; color: white; padding: 10px 24px; }
+    .btn-send:hover { background: #1557b0; }
+
+    /* === 📂 文件列表面板 (新增) === */
+    #fileListPanel {
+        display: none; /* 默认隐藏 */
+        margin-bottom: 15px;
+        padding: 12px;
+        background: #f8f9fa;
+        border: 1px dashed #ccc;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #444;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+    .file-item { display: flex; align-items: center; margin-bottom: 4px; }
+    .file-icon { margin-right: 6px; }
+    .file-chunks { margin-left: auto; color: #888; font-size: 12px; background: #eee; padding: 2px 6px; border-radius: 4px; }
+
+    /* === 聊天区域 === */
+    #chatBox {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 10px;
+        margin-bottom: 15px;
+        scroll-behavior: smooth;
+    }
+
+    /* 消息气泡 */
+    .msg {
+        margin: 12px 0;
+        padding: 12px 16px;
+        border-radius: 8px;
+        max-width: 85%;
+        line-height: 1.6;
+        word-wrap: break-word;
+        font-size: 14px;
+        position: relative;
+    }
+    .user {
+        background: #e8f0fe;
+        color: #1967d2;
+        margin-left: auto;
+        border-bottom-right-radius: 2px;
+    }
+    .bot {
+        background: #f1f3f4;
+        color: #202124;
+        margin-right: auto;
+        border-bottom-left-radius: 2px;
+    }
+
+    /* 🛠️ Agent 思考过程 (黑客风格) */
+    .steps {
+        background: #2b2b2b;
+        color: #a9b7c6;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 12px;
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 6px;
+        white-space: pre-wrap;
+        border-left: 4px solid #34a853;
+        display: none; /* 有内容才显示 */
+    }
+
+    /* === 底部输入框 === */
+    .input-area { display: flex; gap: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+    input {
+        flex: 1;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        outline: none;
+        transition: border 0.2s;
+        font-size: 14px;
+    }
+    input:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.1); }
+</style>
+</head>
+<body>
+
+<div class="box">
+    <div class="header">
+        <div>
+            <h2>🤖 OpenClaw Lite <span class="subtitle">(Agent版)</span></h2>
+        </div>
+        <div>
+            <button onclick="clearHistory()" class="btn-clear" title="清空聊天记录">🗑️ 清空</button>
+            <button onclick="sync()" id="btnSync" class="btn-sync">📚 同步文档</button>
+        </div>
+    </div>
+
+    <div id="fileListPanel"></div>
+
+    <div id="chatBox">
+        <div class="msg bot">你好！我是具备 <b style="color:#1a73e8">代码执行能力</b> 的 AI 助手。<br>
+        我可以帮你分析文档，或者编写 Python 代码来计算数据。<br><br>
+        <i>提示：请先点击右上角“同步文档”读取 D 盘文件。</i></div>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="ipt" placeholder="输入问题或指令... (回车发送)" onkeypress="if(event.keyCode==13) send()">
+        <button onclick="send()" class="btn-send">发送</button>
+    </div>
+</div>
+
+<script>
+    // === 页面加载：尝试获取历史记录 ===
+// === 页面加载：自动恢复聊天记录 + 恢复文件列表 ===
+    window.onload = async () => {
+        // 1. 加载聊天记录
+        try {
+            const res = await fetch('/get_history');
+            const history = await res.json();
+            if (history && history.length > 0) {
+                const box = document.getElementById('chatBox');
+                box.innerHTML = '';
+                history.forEach(msg => {
+                    const cls = msg.role === 'user' ? 'user' : 'bot';
+                    box.innerHTML += `<div class="msg ${cls}">${formatText(msg.content)}</div>`;
+                });
+                box.innerHTML += '<div style="text-align:center; color:#999; font-size:12px; margin:10px;">--- 以上为历史记录 ---</div>';
+                box.scrollTop = box.scrollHeight;
+            }
+        } catch (e) { console.log("加载历史失败"); }
+
+        // 2. 🆕 加载上次保存的知识库列表 (让你知道不用重新读了)
+        try {
+            const res = await fetch('/get_db_status');
+            const data = await res.json();
+
+            if (data.files && data.files.length > 0) {
+                const listPanel = document.getElementById('fileListPanel');
+                listPanel.style.display = 'block';
+
+                let html = `<div style="margin-bottom:5px; font-weight:bold; color:#1a73e8;">
+                                ⚡ 已自动加载缓存知识库 (${data.total_chunks} 片段)
+                            </div>`;
+
+                data.files.forEach(f => {
+                    // 缓存文件的图标用蓝色，区别于新读取的绿色
+                    html += `
+                        <div class="file-item" style="color:#5f6368">
+                            <span class="file-icon">💾</span>
+                            <span>${f.name}</span>
+                            <span class="file-chunks">${f.chunks} 片段</span>
+                        </div>
+                    `;
+                });
+                listPanel.innerHTML = html;
+            }
+        } catch (e) { console.log("加载数据库状态失败"); }
+    };
+
+    // === 功能 1：同步文档并显示列表 ===
+    async function sync() {
+        const btn = document.getElementById('btnSync');
+        const listPanel = document.getElementById('fileListPanel');
+
+        // UI Loading
+        const oldText = btn.innerText;
+        btn.innerText = "⏳ 读取中...";
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/sync_docs_get');
+            const data = await res.json();
+
+            // 弹窗简单提示
+            alert(data.message);
+
+            // 渲染文件列表
+            if (data.files && data.files.length > 0) {
+                listPanel.style.display = 'block';
+                let html = '<div style="margin-bottom:5px; font-weight:bold;">📂 D:\\MyAI_Assistant\\dist\\docs_input</div>';
+
+                data.files.forEach(f => {
+                    let icon = "✅";
+                    let color = "#2d8e47";
+                    let statusText = `${f.chunks} 片段`;
+
+                    if(f.status === 'error') { icon = "❌"; color = "#d93025"; statusText = "读取失败"; }
+                    if(f.status === 'empty') { icon = "⚠️"; color = "#f9ab00"; statusText = "空文件"; }
+
+                    html += `
+                        <div class="file-item" style="color:${color}">
+                            <span class="file-icon">${icon}</span>
+                            <span>${f.name}</span>
+                            <span class="file-chunks">${statusText}</span>
+                        </div>
+                    `;
+                });
+                listPanel.innerHTML = html;
+            } else {
+                listPanel.style.display = 'block';
+                listPanel.innerHTML = '<span style="color:#d93025;">📂 文件夹为空，请放入 .docx 文档</span>';
+            }
+
+        } catch (e) {
+            alert("同步失败，请检查后端服务: " + e.message);
+        } finally {
+            btn.innerText = oldText;
+            btn.disabled = false;
+        }
+    }
+
+    // === 功能 2：发送消息 ===
+    async function send() {
+        const ipt = document.getElementById('ipt');
+        const box = document.getElementById('chatBox');
+        const txt = ipt.value.trim();
+        if(!txt) return;
+
+        // 1. 显示用户消息
+        box.innerHTML += `<div class="msg user">${formatText(txt)}</div>`;
+        ipt.value = '';
+        box.scrollTop = box.scrollHeight;
+
+        // 2. 显示 Loading 占位符
+        const loadId = "load-" + Date.now();
+        box.innerHTML += `<div class="msg bot" id="${loadId}">🧠 正在思考并执行任务...</div>`;
+        box.scrollTop = box.scrollHeight;
+
+        try {
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question: txt})
+            });
+            const data = await res.json();
+
+            // 3. 构建回复 HTML
+            let finalHtml = "";
+
+            // 如果有 Agent 思考/执行步骤，显示在黑色终端框里
+            if (data.steps && data.steps.length > 0) {
+                finalHtml += `<div class="steps" style="display:block;">${data.steps.join('\n\n----------------\n\n')}</div>`;
+            }
+
+            // 显示最终回答 (支持简单的换行显示)
+            finalHtml += formatText(data.answer);
+
+            document.getElementById(loadId).innerHTML = finalHtml;
+        } catch (e) {
+            document.getElementById(loadId).innerText = "❌ 发送失败: " + e.message;
+        }
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // === 功能 3：清空历史 ===
+    async function clearHistory() {
+        if(!confirm("确定要删除所有记忆吗？")) return;
+        try {
+            await fetch('/clear_history', {method: 'POST'}); // 假设后端有这个接口，如果没有也没事
+            document.getElementById('chatBox').innerHTML = '<div class="msg bot">记忆已清除。</div>';
+            document.getElementById('fileListPanel').style.display = 'none'; // 顺便隐藏文件列表
+        } catch(e) {
+            alert("清除失败");
+        }
+    }
+
+    // 简单的文本格式化（处理换行）
+    function formatText(text) {
+        if (!text) return "";
+        return text.replace(/\n/g, '<br>');
+    }
+</script>
+</body>
+</html>
